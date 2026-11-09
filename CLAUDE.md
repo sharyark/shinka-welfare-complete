@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Shinka Welfare Management System: one Django 5.2 backend (REST API + Unfold admin panel) serving a welfare society's committee, a future React Native app (`mobile/`, Phase 3), and an existing public website (separate repo). Design lives in `docs/architecture.md`; decisions in `docs/adr/` (modular monolith, shared-table multi-tenancy, phone login + JWT, double-entry fund accounting, registry + CNIC protection). The README "Finance rules" and "Registry rules" tables map each rule to the file that enforces it.
+Shinka Welfare Management System: one Django 5.2 backend (REST API + Unfold admin panel) serving a welfare society's committee, a future React Native app (`mobile/`, Phase 3), and an existing public website (separate repo). Design lives in `docs/architecture.md`; decisions in `docs/adr/` (modular monolith, shared-table multi-tenancy, phone login + JWT, double-entry fund accounting, registry + CNIC protection, need score). The README "Finance rules" and "Registry rules" tables map each rule to the file that enforces it.
 
 The README is also written as a teaching guide for the owner (the "🎓 Tour" and "Lessons from bugs" sections). Keep that style when updating it, and keep code comments plain and explanatory.
 
@@ -52,6 +52,8 @@ Settings: `config/settings/{base,dev,test,prod}.py`; pytest uses `config.setting
 - Months close in order (`services/closing.py`); only published months are exposed publicly (`selectors.published_reports`).
 - Tests: `apps.core.testing.make_user(society, *roles)` creates role users; each app's `tests/conftest.py` builds fixtures on it.
 
-**Registry (ADR 0005).** Household → Members (exactly one head, DB-enforced). CNICs go only through `apps/registry/cnic.py::protect_cnic` → `cnic_encrypted` (Fernet, `FIELD_ENCRYPTION_KEYS`), `cnic_hash` (HMAC with `CNIC_HASH_PEPPER`, unique per society) and `cnic_masked`. Never return or log the plain CNIC; the API accepts it write-only. Verification is maker-checker plus a conflict-of-interest check (`_is_linked`). Volunteers see only households they registered (`selectors.households_for`).
+**Registry (ADR 0005).** Household → Members (exactly one head, DB-enforced). CNICs go only through `apps/registry/cnic.py::protect_cnic` → `cnic_encrypted` (Fernet, `FIELD_ENCRYPTION_KEYS`), `cnic_hash` (HMAC with `CNIC_HASH_PEPPER`, unique per society) and `cnic_masked`. Never return or log the plain CNIC; the API accepts it write-only. Verification is maker-checker plus a conflict-of-interest check (`registry.services.is_linked`). Volunteers see only households they registered (`selectors.households_for`).
 
-**Phasing (YAGNI).** Apps are added only when their phase starts. Phase 2 has added `registry`; `assessment`, `programs`, `benefits`, `applications` come next (see architecture.md §7–9, §21). Don't scaffold empty apps ahead of time.
+**Assessment (ADR 0006).** Survey questions and score factors are defined in `apps/assessment/survey.py` (pure Python); factor points are per-society `NeedFactor` rows with `django-simple-history`. A submitted `Assessment` freezes `score` + `breakdown`; never recompute old ones. Only the President approves. Scores are visible only to President/Coordinator (`selectors.can_see_scores`; the API swaps serializers). Get a household's current score with `selectors.with_need_score(qs)`; it isn't stored on `Household`.
+
+**Phasing (YAGNI).** Apps are added only when their phase starts. Phase 2 has added `registry` and `assessment`; `programs`, `benefits`, `applications` come next (see architecture.md §7–9, §21). Don't scaffold empty apps ahead of time.

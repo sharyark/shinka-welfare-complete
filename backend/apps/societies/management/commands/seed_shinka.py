@@ -7,6 +7,7 @@ Safe to run more than once.
 
 from django.core.management.base import BaseCommand
 
+from apps.assessment.services import ensure_factors
 from apps.finance.services.setup import ensure_finance_setup
 from apps.societies.models import Society
 
@@ -32,3 +33,5 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"{verb} {society}"))
         ensure_finance_setup(society)
         self.stdout.write(self.style.SUCCESS("Funds and accounts ready."))
+        ensure_factors(society)
+        self.stdout.write(self.style.SUCCESS("Need-score weights ready."))

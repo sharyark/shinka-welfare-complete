@@ -148,7 +148,7 @@ def _locked(household: Household) -> Household:
     return Household.all_objects.select_for_update().get(pk=household.pk)
 
 
-def _is_linked(user, household: Household) -> bool:
+def is_linked(user, household: Household) -> bool:
     """The user's own family: their app account is linked, or it's their phone number."""
     return household.users.filter(pk=user.pk).exists() or (
         bool(household.phone) and household.phone == user.phone
@@ -165,7 +165,7 @@ def verify_household(household: Household, user) -> Household:
         raise BusinessRuleError(
             "You registered this household, so someone else must verify it.", code="maker_checker"
         )
-    if _is_linked(user, household):
+    if is_linked(user, household):
         raise BusinessRuleError("You can't verify your own family's household.", code="conflict_of_interest")
     if not household.members.filter(relation=Member.Relation.HEAD).exists():
         raise BusinessRuleError("Add the head of household before verifying.", code="one_head")

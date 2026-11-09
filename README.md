@@ -6,7 +6,7 @@ Full design: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/ad
 
 | Folder | What | Status |
 |---|---|---|
-| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) done · **Phase 2: registry done**, programs next |
+| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) done · **Phase 2: registry + need score done**, programs next |
 | `mobile/` | React Native (Expo) app | Phase 3 |
 | website | Existing public site (separate repo: `ShinkaWellFareSociety`) | Live |
 
@@ -21,7 +21,7 @@ cd backend
 cp .env.example .env
 uv sync
 uv run python manage.py migrate
-uv run python manage.py seed_shinka            # society + 9 funds + chart of accounts
+uv run python manage.py seed_shinka            # society, funds, chart of accounts, need-score weights
 uv run python manage.py createsuperuser      # asks for phone, name, password
 uv run python manage.py runserver
 ```
@@ -79,6 +79,9 @@ uv run celery -A config worker -l info          # background worker (needs Redis
 | POST | `/api/v1/registry/households/{id}/members/` | members | Add a member |
 | PATCH / DELETE | `/api/v1/registry/members/{id}/` | members | Change a member, or remove one added by mistake (pending households only) |
 | POST | `/api/v1/registry/households/{id}/verify/` · `reject/` · `reopen/` · `archive/` | Coordinator, President | Decide a household (all but verify need `{reason}`) |
+| GET | `/api/v1/assessments/survey/` | survey users | The survey questions (English + Urdu), so the app can draw the form |
+| GET / POST | `/api/v1/assessments/` | President, Coordinator, volunteers | Submit a household survey (pending). Volunteers see their own, **without scores** |
+| POST | `/api/v1/assessments/{id}/approve/` · `reject/` | President | Decide a survey (reject needs `{reason}`) |
 
 Phones can be typed in any common format (`0300-1234567`, `+92 300 1234567`…) on every login screen. They are stored as `+923001234567`.
 
@@ -116,10 +119,25 @@ See [ADR 0004](docs/adr/0004-fund-accounting-double-entry.md) for why.
 
 See [ADR 0005](docs/adr/0005-household-registry-and-cnic-protection.md) for why. **Production needs two new secrets**, `FIELD_ENCRYPTION_KEYS` and `CNIC_HASH_PEPPER` (see `backend/.env.example`). Back them up: without them, stored CNICs can't be read or matched.
 
+## Need score rules (Phase 2)
+
+| Rule | Where it lives |
+|---|---|
+| Score 0–100 from member facts + 5 survey answers, using the committee's weights | `apps/assessment/survey.py` (`compute_score`) |
+| Weights are edited by the President; every change is kept with who made it | `NeedFactor` + django-simple-history (*History* button) |
+| A submitted score is frozen with its breakdown; weight changes affect only new surveys | `services.submit_assessment` |
+| One open survey per household | `services.check_can_submit` + DB constraint `one_pending_assessment` |
+| Only the President approves; not their own survey, not their own family; household must be verified | `services.approve_assessment` |
+| The newest approved survey counts; it expires after 12 months (`assessment_valid_months`) | `selectors.with_need_score` |
+| Only the President and Coordinator ever see scores | `selectors.can_see_scores`, two API serializers |
+
+See [ADR 0006](docs/adr/0006-need-score.md) for why.
+
 ### Registering a household (admin panel)
 1. **Households → Mohallas**: add the village's mohallas once.
 2. **Households → Add**: tick *Consent given*, choose the mohalla, then add the members (one *Head of household*). Type each CNIC once; afterwards only the masked form is shown.
 3. Someone **other than the person who registered it** opens the list, ticks it and runs *Verify selected households*. The page shows possible duplicates (same phone, or same name and father's name) to check first.
+4. **Need assessment → Assessments → Add**: answer the survey. The President then ticks it and runs *Approve*. Weights are under **Need factors**.
 
 ### Monthly routine for the Finance Secretary
 1. **Donations → filter "Pending approval"** → tick → *Approve selected donations*. Open an approved donation to send the **WhatsApp receipt** link.
@@ -161,6 +179,13 @@ See [ADR 0005](docs/adr/0005-household-registry-and-cnic-protection.md) for why.
 4. **`selectors.py`**: `households_for()` is the row-level permission layer; `search_households()` finds a full CNIC by hashing what was typed.
 5. **`admin.py`**: members are edited inline on the household page. The formset checks "exactly one head" across all rows, because one row alone can't know.
 
+### 🎓 Tour of the need score (Phase 2)
+
+1. **`apps/assessment/survey.py`**: pure Python, no database. Questions, factors and `compute_score()`. Its tests (`test_survey.py`) run in milliseconds.
+2. **`models.py`**: `HistoricalRecords()` on `NeedFactor` adds a history table automatically. `Assessment` stores the score *and* how it was reached (a snapshot).
+3. **`selectors.with_need_score()`**: a `Subquery` picks each household's newest valid approved score in one query. This is how programs will find eligible families.
+4. **`api.py`**: `get_serializer_class()` returns a different serializer by role, so volunteers' responses simply don't contain the score.
+
 ### 🎓 Lessons from bugs caught while building Phase 1
 
 - **Querysets written on a class are built once, when the server starts.** `queryset=Fund.objects.filter(...)` on a serializer ran before any society was known, so the automatic society filter was skipped. The service still refused the foreign fund (defence in depth), but now `core.serializers.SocietyPKField` builds the choices per request.
@@ -172,12 +197,12 @@ See [ADR 0005](docs/adr/0005-household-registry-and-cnic-protection.md) for why.
 
 ### Why only these apps?
 
-The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 adds `registry` (done), then `assessment`, `programs`, `benefits`, `applications`.
+The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 adds `registry` and `assessment` (done), then `programs`, `benefits`, `applications`.
 
 ---
 
 ## Next
 
 - **Website**: show the live Transparency page from `/api/v1/public/shinka/transparency/` instead of Facebook photos (in the `ShinkaWellFareSociety` repo).
-- **Phase 2 — rest**: need score (`assessment`), programs and cycles, enrollments and entitlements (`benefits`), applications. Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
+- **Phase 2 — rest**: programs and cycles (with need-score cutoffs), enrollments and entitlements (`benefits`), applications. Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
 - Later in finance: automatic WhatsApp/SMS receipts (notifications module), PDF monthly report, file storage on Cloudflare R2.

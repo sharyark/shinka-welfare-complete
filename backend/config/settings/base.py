@@ -25,6 +25,7 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.
 DJANGO_APPS = [
     "unfold",  # must come before django.contrib.admin
     "unfold.contrib.filters",
+    "unfold.contrib.simple_history",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -39,6 +40,7 @@ THIRD_PARTY_APPS = [
     "django_filters",
     "drf_spectacular",
     "corsheaders",
+    "simple_history",  # keeps every change to chosen models (e.g. need-score weights)
 ]
 
 # Our own modules. New ones are added here phase by phase (see docs/architecture.md).
@@ -48,6 +50,7 @@ LOCAL_APPS = [
     "apps.accounts",
     "apps.finance",
     "apps.registry",
+    "apps.assessment",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -63,6 +66,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.core.middleware.CurrentSocietyMiddleware",
+    "simple_history.middleware.HistoryRequestMiddleware",  # history records who made each change
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -168,6 +172,7 @@ SPECTACULAR_SETTINGS = {
         "DonationStatusEnum": "apps.finance.models.Donation.Status",
         "ExpenseStatusEnum": "apps.finance.models.Expense.Status",
         "HouseholdStatusEnum": "apps.registry.models.Household.Status",
+        "AssessmentStatusEnum": "apps.assessment.models.Assessment.Status",
     },
 }
 
