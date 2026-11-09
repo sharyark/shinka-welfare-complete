@@ -1,0 +1,55 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+Shinka Welfare Management System: one Django 5.2 backend (REST API + Unfold admin panel) serving a welfare society's committee, a future React Native app (`mobile/`, Phase 3), and an existing public website (separate repo). Design lives in `docs/architecture.md`; decisions in `docs/adr/` (modular monolith, shared-table multi-tenancy, phone login + JWT, double-entry fund accounting). The README "Finance rules" table maps each money rule to the file that enforces it.
+
+The README is also written as a teaching guide for the owner (the "🎓 Tour" and "Lessons from bugs" sections). Keep that style when updating it, and keep code comments plain and explanatory.
+
+## Commands
+
+All backend commands run from `backend/` with `uv` (Python 3.12):
+
+```bash
+uv sync
+uv run python manage.py migrate
+uv run python manage.py seed_shinka          # society + funds + chart of accounts
+uv run python manage.py runserver            # /admin/, /api/docs/, /api/v1/health/
+
+uv run pytest                                # uses --reuse-db; add --create-db after model/migration changes
+uv run pytest apps/finance/tests/test_expenses.py::test_name
+uv run pytest -k maker_checker
+
+uv run ruff check . && uv run ruff format .
+uv run python manage.py makemigrations --check --dry-run
+```
+
+SQLite is used when `DATABASE_URL` is empty (`.env.example`). `docker compose up --build` runs PostgreSQL + Redis. CI (`.github/workflows/backend.yml`) runs ruff check + `ruff format --check`, the migrations check, tests **on PostgreSQL**, and `manage.py check --deploy` with prod settings. All of these must pass.
+
+Settings: `config/settings/{base,dev,test,prod}.py`; pytest uses `config.settings.test` (MD5 hasher, eager Celery, no throttling, plus the test-only `apps.core.tests.testapp`).
+
+## Architecture
+
+**Multi-tenancy (ADR 0002).** Data models inherit `apps.core.models.TenantModel` (UUID pk, timestamps, `society`, `created_by`). The current society is held in a ContextVar (`apps/core/context.py`):
+- `CurrentSocietyMiddleware` sets it for session (admin) requests. JWT users are only known inside DRF, so API views must use `apps.core.api.SocietyScopedMixin`.
+- `Model.objects` (`SocietyManager`) auto-filters to the current society; `Model.all_objects` is unfiltered. Outside a request (shell, Celery, migrations) nothing is filtered; use `use_society(...)` to scope a block.
+- Never write `queryset=Model.objects.filter(...)` on a serializer class: it is built at import time, before any society is set. Use `apps.core.serializers.SocietyPKField`.
+
+**Service layer.** Business rules live in plain functions under `apps/<app>/services/`. API views, admin actions, Celery tasks and tests all call services; nothing else writes finance tables. Reads/aggregations go in `selectors.py`. Views and serializers stay thin (validate → call service → serialize). Admin forms call `check_can_*` helpers to show rule errors, and admin actions call the services.
+
+**Errors.** Services raise `apps.core.exceptions.BusinessRuleError(message, code)` (→ HTTP 409 `{"detail", "code"}`) or Django `PermissionDenied`/`ValidationError` (→ 403/400) via the DRF `EXCEPTION_HANDLER`. Services never know about HTTP.
+
+**Roles.** Roles are Django `Group`s created by data migrations (`accounts/migrations/0002_create_roles.py`, `finance/migrations/0002_role_permissions.py`). Check them with `apps/accounts/roles.py` (`require_role`, `has_any_role`). Superusers deliberately do **not** bypass role checks: the developer account cannot approve money.
+
+**Auth.** Custom `accounts.User` logs in by phone. `accounts.backends.PhoneBackend` normalises any phone format to `+92…` for every login path (admin and API). API auth is SimpleJWT with refresh rotation and blacklisting. All routes live under `/api/v1/`.
+
+**Finance (ADR 0004).** Double-entry fund accounting: asset accounts (where money is) vs fund accounts (what it's for).
+- `services/ledger.py::post_entry` is the only writer of `JournalEntry`/`LedgerLine`. Entries must balance, are never edited or deleted (`reverse_entry` instead), and cannot post into closed months (`services/periods.py`).
+- Donations and expenses are maker-checker state machines. They use `select_for_update()` on fund, receipt-counter and similar rows to prevent concurrent double approvals and negative fund balances. Expense signing thresholds live in `Society.settings`.
+- Money is always `Decimal`/`DecimalField` (`MONEY` kwargs). Format with `money_str()`, because SQLite and PostgreSQL return sums in different shapes.
+- Months close in order (`services/closing.py`); only published months are exposed publicly (`selectors.published_reports`).
+- `tests/conftest.py` provides a society with finance setup plus role users (`finance_sec`, `president`, `coordinator`, `volunteer`, …) via `make_user(society, *roles)`.
+
+**Phasing (YAGNI).** Apps are added only when their phase starts. Phase 2 will add `registry`, `assessment`, `programs`, `benefits`, `applications` (see architecture.md §7–9, §21). Don't scaffold empty apps ahead of time.
