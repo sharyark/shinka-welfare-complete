@@ -6,7 +6,7 @@ Full design: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/ad
 
 | Folder | What | Status |
 |---|---|---|
-| `backend/` | Django 5.2 LTS: REST API + admin panel | **Phase 1 (finance) done** |
+| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) done · **Phase 2: registry done**, programs next |
 | `mobile/` | React Native (Expo) app | Phase 3 |
 | website | Existing public site (separate repo: `ShinkaWellFareSociety`) | Live |
 
@@ -73,6 +73,12 @@ uv run celery -A config worker -l info          # background worker (needs Redis
 | POST | `/api/v1/finance/expenses/{id}/approve/` · `reject/` · `reverse/` | signing roles | Sign / decide an expense |
 | GET | `/api/v1/public/{society}/transparency/?year=2026` | anyone | **Published** monthly reports: totals only, no names |
 | GET | `/api/v1/public/{society}/funds/` | anyone | Fund names, for the website's donate page |
+| GET | `/api/v1/registry/mohallas/` | members | Mohallas, for the registration form |
+| GET / POST | `/api/v1/registry/households/` | members | Find (`?q=` code, name, phone or full CNIC) or register a household with its members (pending). Volunteers see only their own |
+| GET / PATCH | `/api/v1/registry/households/{id}/` | members | One household with members (CNIC shown masked) |
+| POST | `/api/v1/registry/households/{id}/members/` | members | Add a member |
+| PATCH / DELETE | `/api/v1/registry/members/{id}/` | members | Change a member, or remove one added by mistake (pending households only) |
+| POST | `/api/v1/registry/households/{id}/verify/` · `reject/` · `reopen/` · `archive/` | Coordinator, President | Decide a household (all but verify need `{reason}`) |
 
 Phones can be typed in any common format (`0300-1234567`, `+92 300 1234567`…) on every login screen. They are stored as `+923001234567`.
 
@@ -95,6 +101,25 @@ Errors from business rules come back as **409** with a `code`, e.g. `{"detail": 
 | The developer superuser can't approve money | `apps/accounts/roles.py` |
 
 See [ADR 0004](docs/adr/0004-fund-accounting-double-entry.md) for why.
+
+## Registry rules (Phase 2)
+
+| Rule | Where it lives |
+|---|---|
+| A family must give consent before it is registered | `apps/registry/services.py` (`check_can_register`) |
+| Exactly one head per household | `services.py` + DB constraint `one_head_per_household` |
+| A CNIC is registered only once per society | `services.check_member` + DB constraint `uniq_member_cnic` |
+| CNICs are stored encrypted + hashed, shown only masked (`37101-*****-3`) | `apps/registry/cnic.py`, `apps/core/crypto.py` |
+| Whoever registered a household can't verify it; nobody verifies their own family | `services.verify_household` |
+| Volunteers see and edit only the households they registered, until verified | `selectors.households_for`, `services.check_can_edit` |
+| Household codes are sequential (`SHK-0001`) | `HouseholdCounter`, locked while incremented |
+
+See [ADR 0005](docs/adr/0005-household-registry-and-cnic-protection.md) for why. **Production needs two new secrets**, `FIELD_ENCRYPTION_KEYS` and `CNIC_HASH_PEPPER` (see `backend/.env.example`). Back them up: without them, stored CNICs can't be read or matched.
+
+### Registering a household (admin panel)
+1. **Households → Mohallas**: add the village's mohallas once.
+2. **Households → Add**: tick *Consent given*, choose the mohalla, then add the members (one *Head of household*). Type each CNIC once; afterwards only the masked form is shown.
+3. Someone **other than the person who registered it** opens the list, ticks it and runs *Verify selected households*. The page shows possible duplicates (same phone, or same name and father's name) to check first.
 
 ### Monthly routine for the Finance Secretary
 1. **Donations → filter "Pending approval"** → tick → *Approve selected donations*. Open an approved donation to send the **WhatsApp receipt** link.
@@ -128,20 +153,31 @@ See [ADR 0004](docs/adr/0004-fund-accounting-double-entry.md) for why.
 7. **`api.py` + `serializers.py`**: thin views: validate, call a service, return. `apps/core/exceptions.py` turns rule errors into HTTP 409.
 8. **`tests/`**: read the test names; they are the rules in plain English.
 
+### 🎓 Tour of the registry module (Phase 2)
+
+1. **`apps/registry/models.py`**: the top docstring shows the household lifecycle. Note the two `UniqueConstraint`s with a `condition`: "one head per household" and "a CNIC only once" are enforced by the database itself.
+2. **`apps/registry/cnic.py` + `apps/core/crypto.py`**: hashing vs encryption (architecture §14). The hash uses a secret *pepper* (HMAC), because there are few enough possible CNICs to try them all against a plain hash.
+3. **`services.py`**: every write re-reads the household with `select_for_update()` before checking its status (see the lessons below).
+4. **`selectors.py`**: `households_for()` is the row-level permission layer; `search_households()` finds a full CNIC by hashing what was typed.
+5. **`admin.py`**: members are edited inline on the household page. The formset checks "exactly one head" across all rows, because one row alone can't know.
+
 ### 🎓 Lessons from bugs caught while building Phase 1
 
 - **Querysets written on a class are built once, when the server starts.** `queryset=Fund.objects.filter(...)` on a serializer ran before any society was known, so the automatic society filter was skipped. The service still refused the foreign fund (defence in depth), but now `core.serializers.SocietyPKField` builds the choices per request.
 - **SQLite and PostgreSQL return sums differently** (`700` vs `700.00`). Money shown to people goes through `money_str()`, and CI runs the tests on PostgreSQL.
 - **Every login path needs the same input cleaning.** The API normalised phone numbers but the admin login didn't, so `0300…` failed there. `accounts.backends.PhoneBackend` now does it once for all paths.
 
+- **A copy of a row in memory can be out of date.** `remove_member()` checked `member.household.status`, but that object was loaded before someone verified the household, so it still said "pending". Services now re-read (and lock) the row before deciding. A test caught it.
+- **Rules that involve several rows can't be checked one row at a time.** Swapping the head (old head → father, daughter → head) looks like "two heads" to each row alone, so the admin checks the whole set of members and saves non-heads first.
+
 ### Why only these apps?
 
-The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 adds `registry`, `assessment`, `programs`, `benefits`, `applications`.
+The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 adds `registry` (done), then `assessment`, `programs`, `benefits`, `applications`.
 
 ---
 
 ## Next
 
 - **Website**: show the live Transparency page from `/api/v1/public/shinka/transparency/` instead of Facebook photos (in the `ShinkaWellFareSociety` repo).
-- **Phase 2 — Registry & programs**: households, members, need score, programs, cycles, entitlements, applications. See `docs/architecture.md`, sections 8–9 and 21.
+- **Phase 2 — rest**: need score (`assessment`), programs and cycles, enrollments and entitlements (`benefits`), applications. Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
 - Later in finance: automatic WhatsApp/SMS receipts (notifications module), PDF monthly report, file storage on Cloudflare R2.

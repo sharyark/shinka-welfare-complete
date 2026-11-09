@@ -8,15 +8,20 @@ deleted, and decided records become read-only.
 """
 
 from django import forms
-from django.contrib import admin, messages
+from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q, Sum
-from django.template.response import TemplateResponse
 from django.utils.html import format_html, format_html_join
-from unfold.admin import ModelAdmin, TabularInline
+from unfold.admin import TabularInline
 from unfold.decorators import display
 
-from apps.core.exceptions import BusinessRuleError
+from apps.core.admin_tools import (
+    ServiceAdmin,
+    ServiceCheckedForm,
+    ask_reason,
+    run_service,
+)
+from apps.core.admin_tools import user_society as _society
 
 from .models import (
     Account,
@@ -43,80 +48,8 @@ STATUS_COLORS = {
 }
 
 
-def _error_text(exc) -> str:
-    return getattr(exc, "message", None) or str(exc)
-
-
-def _society(request):
-    return getattr(request.user, "society", None)
-
-
-def run_service(modeladmin, request, queryset, fn, done: str):
-    """Call a service for each selected row and report successes and errors."""
-    ok = 0
-    for obj in queryset:
-        try:
-            fn(obj)
-            ok += 1
-        except (BusinessRuleError, PermissionDenied) as exc:
-            modeladmin.message_user(request, f"{obj}: {_error_text(exc)}", messages.ERROR)
-    if ok:
-        modeladmin.message_user(request, f"{ok} {done}.", messages.SUCCESS)
-
-
-def ask_reason(modeladmin, request, queryset, action: str, title: str, fn, done: str):
-    """Show a 'reason' page first; run the service when it's submitted."""
-    if request.POST.get("apply"):
-        reason = request.POST.get("reason", "")
-        run_service(modeladmin, request, queryset, lambda obj: fn(obj, request.user, reason), done)
-        return None
-    return TemplateResponse(
-        request,
-        "admin/finance/reason_form.html",
-        {
-            **modeladmin.admin_site.each_context(request),
-            "title": title,
-            "queryset": queryset,
-            "action": action,
-        },
-    )
-
-
-class ServiceCheckedForm(forms.ModelForm):
-    """Runs the service's check_can_* function in clean(), so rule errors show on the form."""
-
-    request = None  # set by the admin in get_form()
-
-    def check(self, cleaned_data):  # override
-        pass
-
-    def clean(self):
-        cleaned = super().clean()
-        if self.instance._state.adding and not self.errors:
-            try:
-                self.check(cleaned)
-            except (BusinessRuleError, PermissionDenied) as exc:
-                raise forms.ValidationError(_error_text(exc)) from exc
-        return cleaned
-
-
-class FinanceAdmin(ModelAdmin):
-    """Shared behaviour: no deleting money records; new rows get the user's society."""
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        if issubclass(form, ServiceCheckedForm):
-            form = type(form.__name__, (form,), {"request": request})
-        return form
-
-    def save_model(self, request, obj, form, change):
-        if not change:
-            obj.society = _society(request)
-            obj.created_by = request.user
-        super().save_model(request, obj, form, change)
+class FinanceAdmin(ServiceAdmin):
+    """Shared behaviour for money screens (see ServiceAdmin): no deleting, society set on save."""
 
 
 # --- Funds & accounts ----------------------------------------------------------

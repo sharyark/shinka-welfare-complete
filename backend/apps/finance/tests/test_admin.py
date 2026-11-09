@@ -35,7 +35,7 @@ def test_finance_secretary_can_open_pages(finance_sec, path):
 
 
 def test_auditor_is_read_only(society):
-    from .conftest import make_user
+    from apps.core.testing import make_user
 
     auditor = make_user(society, "Auditor")
     client = admin_client(auditor)

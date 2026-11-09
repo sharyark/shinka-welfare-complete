@@ -1,10 +1,9 @@
 import pytest
 from rest_framework.test import APIClient
 
+from apps.core.testing import make_user
 from apps.finance.models import Donation, Fund
 from apps.finance.services import closing
-
-from .conftest import make_user
 
 pytestmark = pytest.mark.django_db
 BASE = "/api/v1/finance"

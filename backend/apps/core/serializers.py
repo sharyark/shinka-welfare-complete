@@ -18,3 +18,9 @@ class SocietyPKField(serializers.PrimaryKeyRelatedField):
 
     def get_queryset(self):
         return self.model.objects.filter(**self.filters)
+
+
+class ReasonSerializer(serializers.Serializer):
+    """Body of reject / reverse / archive actions."""
+
+    reason = serializers.CharField(max_length=255)
