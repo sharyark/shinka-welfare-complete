@@ -1,0 +1,54 @@
+name: Backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: shinka
+          POSTGRES_USER: shinka
+          POSTGRES_PASSWORD: shinka
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shinka" --health-interval 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://shinka:shinka@localhost:5432/shinka
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check . && uv run ruff format --check .
+
+      - name: Migrations are up to date
+        run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: Tests
+        run: uv run pytest --create-db
+
+      - name: Production security checklist
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+          DJANGO_SECRET_KEY: ci-only-${{ github.run_id }}-a-long-random-value-for-the-check-to-pass
+          DJANGO_ALLOWED_HOSTS: api.example.com
+        run: uv run python manage.py check --deploy --fail-level WARNING

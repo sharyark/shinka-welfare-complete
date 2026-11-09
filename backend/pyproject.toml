@@ -1,0 +1,48 @@
+[project]
+readme = "README.md"
+name = "shinka-welfare-backend"
+version = "0.1.0"
+description = "Shinka Welfare Management System - Django backend (API + admin panel)"
+requires-python = ">=3.12"
+dependencies = [
+    "celery>=5.7.0",
+    "django>=5.2,<5.3",
+    "django-cors-headers>=4.9.0",
+    "django-environ>=0.14.0",
+    "django-filter>=26.2",
+    "django-unfold>=0.110.1",
+    "djangorestframework>=3.18.3",
+    "djangorestframework-simplejwt>=5.5.1",
+    "drf-spectacular>=0.30.0",
+    "gunicorn>=26.2.0",
+    "packaging>=26.3",
+    "psycopg[binary]>=3.3.8",
+    "redis>=8.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "factory-boy>=3.3.3",
+    "pytest>=9.2.0",
+    "pytest-django>=4.14.0",
+    "ruff>=0.17.4",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+addopts = "-q --reuse-db"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["**/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "DJ", "S"]
+ignore = ["S101"]  # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*" = ["S105", "S106"]  # test passwords
+"conftest.py" = ["S105", "S106"]
+"config/settings/*" = ["S105"]

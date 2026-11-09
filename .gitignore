@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Django
+backend/.env
+backend/db.sqlite3
+backend/media/
+backend/staticfiles/
+celerybeat-schedule*
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

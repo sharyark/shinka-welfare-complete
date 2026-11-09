@@ -1,0 +1,55 @@
+# Local development: PostgreSQL, Redis, Django, Celery worker and Celery Beat.
+#
+#   docker compose up --build        start everything
+#   docker compose up db redis       only the database and Redis (run Django with uv)
+#
+# Production will add Nginx and use config.settings.prod (see docs/architecture.md, section 19).
+
+x-django: &django
+  build: ./backend
+  env_file: ./backend/.env
+  environment:
+    DJANGO_SETTINGS_MODULE: config.settings.dev
+    DATABASE_URL: postgres://shinka:shinka@db:5432/shinka
+    REDIS_URL: redis://redis:6379/0
+  volumes:
+    - ./backend:/app
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: shinka
+      POSTGRES_USER: shinka
+      POSTGRES_PASSWORD: shinka
+    ports: ["5433:5432"]  # 5433 on your machine, in case another Postgres uses 5432
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shinka"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  web:
+    <<: *django
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    ports: ["8000:8000"]
+
+  worker:
+    <<: *django
+    command: celery -A config worker -l info
+
+  beat:
+    <<: *django
+    command: celery -A config beat -l info
+
+volumes:
+  pgdata:
