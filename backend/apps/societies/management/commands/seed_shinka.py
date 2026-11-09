@@ -1,16 +1,18 @@
 """
-Create the Shinka Welfare Society record. Safe to run more than once.
+Create the Shinka Welfare Society, its funds and chart of accounts.
+Safe to run more than once.
 
     python manage.py seed_shinka
 """
 
 from django.core.management.base import BaseCommand
 
+from apps.finance.services.setup import ensure_finance_setup
 from apps.societies.models import Society
 
 
 class Command(BaseCommand):
-    help = "Create the Shinka Welfare Society (tenant) if it doesn't exist."
+    help = "Create the Shinka Welfare Society (tenant), its funds and chart of accounts."
 
     def handle(self, *args, **options):
         society, created = Society.objects.get_or_create(
@@ -25,3 +27,5 @@ class Command(BaseCommand):
         )
         verb = "Created" if created else "Already exists:"
         self.stdout.write(self.style.SUCCESS(f"{verb} {society}"))
+        ensure_finance_setup(society)
+        self.stdout.write(self.style.SUCCESS("Funds and accounts ready."))

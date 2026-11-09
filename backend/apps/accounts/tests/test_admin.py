@@ -51,3 +51,12 @@ def test_admin_rejects_invalid_phone(admin_client):
     )
     assert response.status_code == 200
     assert not User.objects.filter(name="X").exists()
+
+
+@pytest.mark.parametrize("typed", ["03001234567", "0300-1234567", "+92 300 1234567"])
+def test_admin_login_accepts_any_phone_format(client, user, typed):
+    staff = user
+    staff.is_staff = True
+    staff.save()
+    response = client.post(reverse("admin:login"), {"username": typed, "password": "Str0ng-pass!"})
+    assert response.status_code == 302  # redirected = logged in

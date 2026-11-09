@@ -16,6 +16,7 @@ from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
 from apps.accounts.api import LoginView, MeView
 from apps.core.api import HealthView
+from apps.finance.urls import finance_urls, public_urls
 
 api_v1 = [
     path("health/", HealthView.as_view(), name="health"),
@@ -23,6 +24,8 @@ api_v1 = [
     path("auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("auth/logout/", TokenBlacklistView.as_view(), name="logout"),
     path("me/", MeView.as_view(), name="me"),
+    path("finance/", include(finance_urls)),
+    path("public/", include(public_urls)),
 ]
 
 urlpatterns = [
