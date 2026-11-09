@@ -51,4 +51,6 @@ jobs:
           DJANGO_SETTINGS_MODULE: config.settings.prod
           DJANGO_SECRET_KEY: ci-only-${{ github.run_id }}-a-long-random-value-for-the-check-to-pass
           DJANGO_ALLOWED_HOSTS: api.example.com
+          FIELD_ENCRYPTION_KEYS: loAyO8IVFQJtOcw6KHTdMfPELMHT-ajvmi4u0BNHT1w=
+          CNIC_HASH_PEPPER: ci-only-pepper
         run: uv run python manage.py check --deploy --fail-level WARNING

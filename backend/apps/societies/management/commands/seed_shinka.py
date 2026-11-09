@@ -25,6 +25,9 @@ class Command(BaseCommand):
                 "founded_year": 2019,
             },
         )
+        if not society.settings.get("household_code_prefix"):
+            society.settings["household_code_prefix"] = "SHK"  # household codes: SHK-0001, SHK-0002…
+            society.save(update_fields=["settings", "updated_at"])
         verb = "Created" if created else "Already exists:"
         self.stdout.write(self.style.SUCCESS(f"{verb} {society}"))
         ensure_finance_setup(society)

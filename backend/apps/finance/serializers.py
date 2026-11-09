@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.accounts.roles import OFFICE_ROLES, has_any_role
-from apps.core.serializers import SocietyPKField
+from apps.core.serializers import ReasonSerializer, SocietyPKField  # noqa: F401  (ReasonSerializer used by api.py)
 
 from .models import Donation, Donor, Expense, Fund, MonthlyClose, money_str
 from .services import expenses as expense_services
@@ -131,10 +131,6 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
         fields = ["fund", "category", "description", "amount", "paid_to", "paid_on", "method", "bill"]
-
-
-class ReasonSerializer(serializers.Serializer):
-    reason = serializers.CharField(max_length=255)
 
 
 # --- Reports ---------------------------------------------------------------------

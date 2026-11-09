@@ -6,6 +6,7 @@ description = "Shinka Welfare Management System - Django backend (API + admin pa
 requires-python = ">=3.12"
 dependencies = [
     "celery>=5.7.0",
+    "cryptography>=50.0.2",
     "django>=5.2,<5.3",
     "django-cors-headers>=4.9.0",
     "django-environ>=0.14.0",
@@ -45,4 +46,5 @@ ignore = ["S101"]  # assert is fine in tests
 [tool.ruff.lint.per-file-ignores]
 "**/tests/*" = ["S105", "S106"]  # test passwords
 "conftest.py" = ["S105", "S106"]
+"apps/core/testing.py" = ["S106"]  # test passwords
 "config/settings/*" = ["S105"]

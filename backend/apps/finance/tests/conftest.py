@@ -2,29 +2,15 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
-from django.contrib.auth.models import Group
 from django.utils import timezone
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import Role
 from apps.core.context import use_society
+from apps.core.testing import make_user
 from apps.finance.models import Fund, PaymentMethod
 from apps.finance.services import donations
 from apps.finance.services.setup import ensure_finance_setup
 from apps.societies.models import Society
-
-_phone = iter(range(3000000001, 3009999999))
-
-
-def make_user(society, *roles, staff=True, name=None):
-    user = User.objects.create_user(
-        phone=f"0{next(_phone)}",
-        password="pw-123456",
-        name=name or ", ".join(roles) or "user",
-        society=society,
-        is_staff=staff,
-    )
-    user.groups.add(*Group.objects.filter(name__in=roles))
-    return user
 
 
 @pytest.fixture

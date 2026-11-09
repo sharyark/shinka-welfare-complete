@@ -47,6 +47,7 @@ LOCAL_APPS = [
     "apps.societies",
     "apps.accounts",
     "apps.finance",
+    "apps.registry",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -103,6 +104,18 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# --- Personal data protection ----------------------------------------------
+# CNIC numbers are stored encrypted (Fernet) plus a keyed hash for finding duplicates.
+# Generate a key:  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Several comma-separated keys allow rotation: the first one encrypts, all of them decrypt.
+# The defaults below are public, so they are for development and tests only (prod.py requires real ones).
+FIELD_ENCRYPTION_KEYS = env.list(
+    "FIELD_ENCRYPTION_KEYS", default=["loAyO8IVFQJtOcw6KHTdMfPELMHT-ajvmi4u0BNHT1w="]
+)
+# A secret mixed into CNIC hashes, so a leaked database can't be matched against a list of CNICs.
+# Never change it once data exists: every stored hash would stop matching.
+CNIC_HASH_PEPPER = env("CNIC_HASH_PEPPER", default="dev-only-pepper")
+
 # --- Language & time --------------------------------------------------------
 
 LANGUAGE_CODE = "en"
@@ -150,6 +163,12 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    # Several models have a "status" field with different choices; give each its own name in the docs.
+    "ENUM_NAME_OVERRIDES": {
+        "DonationStatusEnum": "apps.finance.models.Donation.Status",
+        "ExpenseStatusEnum": "apps.finance.models.Expense.Status",
+        "HouseholdStatusEnum": "apps.registry.models.Household.Status",
+    },
 }
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
