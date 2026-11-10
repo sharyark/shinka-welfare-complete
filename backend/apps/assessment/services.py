@@ -114,7 +114,11 @@ def add_months(day: date, months: int) -> date:
 
 
 def _locked(assessment: Assessment) -> Assessment:
-    return Assessment.all_objects.select_for_update().select_related("household").get(pk=assessment.pk)
+    return (
+        Assessment.all_objects.select_for_update(of=("self",))
+        .select_related("household")
+        .get(pk=assessment.pk)
+    )
 
 
 @transaction.atomic

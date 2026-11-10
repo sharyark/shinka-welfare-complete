@@ -51,6 +51,8 @@ LOCAL_APPS = [
     "apps.finance",
     "apps.registry",
     "apps.assessment",
+    "apps.programs",
+    "apps.benefits",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -173,6 +175,9 @@ SPECTACULAR_SETTINGS = {
         "ExpenseStatusEnum": "apps.finance.models.Expense.Status",
         "HouseholdStatusEnum": "apps.registry.models.Household.Status",
         "AssessmentStatusEnum": "apps.assessment.models.Assessment.Status",
+        "CycleStatusEnum": "apps.programs.models.Cycle.Status",
+        "EnrollmentStatusEnum": "apps.benefits.models.Enrollment.Status",
+        "EntitlementStatusEnum": "apps.benefits.models.Entitlement.Status",
     },
 }
 

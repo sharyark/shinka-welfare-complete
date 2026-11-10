@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand
 
 from apps.assessment.services import ensure_factors
 from apps.finance.services.setup import ensure_finance_setup
+from apps.programs.setup import ensure_default_programs
 from apps.societies.models import Society
 
 
@@ -35,3 +36,5 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Funds and accounts ready."))
         ensure_factors(society)
         self.stdout.write(self.style.SUCCESS("Need-score weights ready."))
+        ensure_default_programs(society)
+        self.stdout.write(self.style.SUCCESS("Programs ready (check amounts and cutoffs in the admin)."))

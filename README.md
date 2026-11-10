@@ -6,7 +6,7 @@ Full design: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/ad
 
 | Folder | What | Status |
 |---|---|---|
-| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) done · **Phase 2: registry + need score done**, programs next |
+| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) done · **Phase 2: registry, need score, programs & benefits done**; applications next |
 | `mobile/` | React Native (Expo) app | Phase 3 |
 | website | Existing public site (separate repo: `ShinkaWellFareSociety`) | Live |
 
@@ -21,7 +21,7 @@ cd backend
 cp .env.example .env
 uv sync
 uv run python manage.py migrate
-uv run python manage.py seed_shinka            # society, funds, chart of accounts, need-score weights
+uv run python manage.py seed_shinka            # society, funds, accounts, need-score weights, programs
 uv run python manage.py createsuperuser      # asks for phone, name, password
 uv run python manage.py runserver
 ```
@@ -82,6 +82,12 @@ uv run celery -A config worker -l info          # background worker (needs Redis
 | GET | `/api/v1/assessments/survey/` | survey users | The survey questions (English + Urdu), so the app can draw the form |
 | GET / POST | `/api/v1/assessments/` | President, Coordinator, volunteers | Submit a household survey (pending). Volunteers see their own, **without scores** |
 | POST | `/api/v1/assessments/{id}/approve/` · `reject/` | President | Decide a survey (reject needs `{reason}`) |
+| GET | `/api/v1/benefits/programs/` · `cycles/` | members | Programs; cycles with planned / delivered / budget summary |
+| POST | `/api/v1/benefits/cycles/{id}/activate/` · `generate/` · `close/` | Coordinator, President | Run a cycle. `generate` plans a benefit for everyone eligible (safe to repeat) |
+| GET / POST | `/api/v1/benefits/enrollments/` (+ `{id}/end/`) | members (add: Coordinator, President) | Who is in which program |
+| GET | `/api/v1/benefits/entitlements/` | members | Planned benefits (`?cycle=`, `?status=`). Volunteers see their households only |
+| POST | `/api/v1/benefits/entitlements/{id}/confirm/` | President | Promise a benefit (refused if over the cycle budget) |
+| POST | `/api/v1/benefits/entitlements/{id}/ready/` · `miss/` · `reschedule/` · `cancel/` | Coordinator, President | Move a benefit along its path |
 
 Phones can be typed in any common format (`0300-1234567`, `+92 300 1234567`…) on every login screen. They are stored as `+923001234567`.
 
@@ -132,6 +138,26 @@ See [ADR 0005](docs/adr/0005-household-registry-and-cnic-protection.md) for why.
 | Only the President and Coordinator ever see scores | `selectors.can_see_scores`, two API serializers |
 
 See [ADR 0006](docs/adr/0006-need-score.md) for why.
+
+## Programs & benefits rules (Phase 2)
+
+| Rule | Where it lives |
+|---|---|
+| A program has a cycle per round ("Ramadan 2027") with dates, due date and optional budget | `apps/programs/models.py` |
+| *Generate* plans one benefit per eligible household or person: verified, need score ≥ cutoff, age/gender limits | `apps/benefits/services.py` (`generate_cycle`, `eligible_*`) |
+| Nobody is enrolled twice or gets two benefits in one cycle, even if *Generate* runs again | `services.generate_cycle` + DB constraints |
+| Benefits follow planned → confirmed → ready → delivered (or cancelled / missed → rescheduled); no skipping | `services.ALLOWED` + `services.move` |
+| Only the President confirms, and confirmed benefits can't exceed the cycle budget | `services.confirm_entitlement` (cycle row locked) |
+| Programs where people apply (marriage, water bore, burial) are never generated for everyone | `Program.requires_application` |
+| Closing a cycle cancels what was never confirmed and marks uncollected benefits as missed | `services.close_cycle` |
+
+`seed_shinka` creates Shinka's programs (Education, College Bus, Ramadan, Eid meat, Marriage, Water Bore, Burial) with the example amounts and cutoffs from the architecture. **The committee should check them** under *Programs*.
+
+### Running a Ramadan cycle (admin panel)
+1. **Programs → Cycles → Add**: program *Ramadan Food Package*, name "Ramadan 2027", dates, due date, budget.
+2. Tick it → *Activate*, then *Generate benefits for everyone eligible*.
+3. **Benefits → Entitlements**, filter by cycle: the President ticks and runs *Confirm*. The Coordinator runs *Mark ready to collect*.
+4. After distribution day, tick the cycle → *Close*.
 
 ### Registering a household (admin panel)
 1. **Households → Mohallas**: add the village's mohallas once.
@@ -186,6 +212,13 @@ See [ADR 0006](docs/adr/0006-need-score.md) for why.
 3. **`selectors.with_need_score()`**: a `Subquery` picks each household's newest valid approved score in one query. This is how programs will find eligible families.
 4. **`api.py`**: `get_serializer_class()` returns a different serializer by role, so volunteers' responses simply don't contain the score.
 
+### 🎓 Tour of programs & benefits (Phase 2)
+
+1. **`apps/benefits/models.py`**: the docstring draws the entitlement state machine; `services.ALLOWED` is the same picture as a Python dict.
+2. **`services.generate_cycle`**: written to be **idempotent** (running it twice is the same as once). That matters because people click buttons twice.
+3. **`services.confirm_entitlement`**: locks the *cycle* row, so two confirmations at the same moment can't both squeeze under the budget.
+4. **Dependency direction**: `benefits` imports `programs`, never the reverse. That's why the Cycle admin screen lives in `apps/benefits/admin.py`.
+
 ### 🎓 Lessons from bugs caught while building Phase 1
 
 - **Querysets written on a class are built once, when the server starts.** `queryset=Fund.objects.filter(...)` on a serializer ran before any society was known, so the automatic society filter was skipped. The service still refused the foreign fund (defence in depth), but now `core.serializers.SocietyPKField` builds the choices per request.
@@ -195,14 +228,16 @@ See [ADR 0006](docs/adr/0006-need-score.md) for why.
 - **A copy of a row in memory can be out of date.** `remove_member()` checked `member.household.status`, but that object was loaded before someone verified the household, so it still said "pending". Services now re-read (and lock) the row before deciding. A test caught it.
 - **Rules that involve several rows can't be checked one row at a time.** Swapping the head (old head → father, daughter → head) looks like "two heads" to each row alone, so the admin checks the whole set of members and saves non-heads first.
 
+- **SQLite doesn't check everything PostgreSQL does.** Locking an entitlement while also loading its *optional* cycle works on SQLite, but PostgreSQL refuses it ("FOR UPDATE cannot be applied to the nullable side of an outer join"). Running the tests on PostgreSQL caught it; `select_for_update(of=("self",))` locks only the row we mean.
+
 ### Why only these apps?
 
-The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 adds `registry` and `assessment` (done), then `programs`, `benefits`, `applications`.
+The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 adds `registry`, `assessment`, `programs` and `benefits` (done), then `applications`.
 
 ---
 
 ## Next
 
 - **Website**: show the live Transparency page from `/api/v1/public/shinka/transparency/` instead of Facebook photos (in the `ShinkaWellFareSociety` repo).
-- **Phase 2 — rest**: programs and cycles (with need-score cutoffs), enrollments and entitlements (`benefits`), applications. Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
+- **Phase 2 — rest**: applications (marriage, water bore, burial) that create enrollments and entitlements; recording distributions (what was actually given). Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
 - Later in finance: automatic WhatsApp/SMS receipts (notifications module), PDF monthly report, file storage on Cloudflare R2.
