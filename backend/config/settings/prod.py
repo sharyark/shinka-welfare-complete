@@ -11,6 +11,7 @@ SECRET_KEY = env("DJANGO_SECRET_KEY")  # no default: crash early if missing
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
 FIELD_ENCRYPTION_KEYS = env.list("FIELD_ENCRYPTION_KEYS")  # back these up: lost keys = unreadable CNICs
 CNIC_HASH_PEPPER = env("CNIC_HASH_PEPPER")
+SMS_BACKEND = env("SMS_BACKEND", default="apps.accounts.sms.DisabledSMS")  # never log codes in production
 CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 
 # HTTPS everywhere (Nginx terminates TLS and forwards this header).

@@ -6,7 +6,7 @@ Full design: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/ad
 
 | Folder | What | Status |
 |---|---|---|
-| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) and **Phase 2 (registry, need score, programs, benefits, distribution, applications) done**; Phase 3 next |
+| `backend/` | Django 5.2 LTS: REST API + admin panel | Phases 1–2 done · **Phase 3: mobile login + family API done**; mobile app next |
 | `mobile/` | React Native (Expo) app | Phase 3 |
 | website | Existing public site (separate repo: `ShinkaWellFareSociety`) | Live |
 
@@ -65,6 +65,9 @@ uv run celery -A config worker -l info          # background worker (needs Redis
 | POST | `/api/v1/auth/token/refresh/` | anyone | `{refresh}` → new `{access}` (refresh rotates) |
 | POST | `/api/v1/auth/logout/` | anyone | `{refresh}` → refresh token blacklisted |
 | GET / PATCH | `/api/v1/me/` | logged in | Profile, society and roles |
+| POST | `/api/v1/auth/otp/request/` → `otp/verify/` → `pin/set/` | anyone | Mobile app first login: SMS code, then choose a 4-digit PIN |
+| POST | `/api/v1/auth/pin/login/` | anyone | `{phone, pin, device_id}` → tokens. Volunteers' phones need office approval first |
+| GET | `/api/v1/me/household/` · `me/summary/?year=` · `me/qr/` | the family | Own household; help received and upcoming; QR card token. Never the need score |
 | GET | `/api/v1/finance/funds/` | members | Active funds (balances for office bearers only) |
 | GET / POST | `/api/v1/finance/donors/` | members | Find or add donors (`?q=name`) |
 | GET / POST | `/api/v1/finance/donations/` | members | Record a donation (pending). Volunteers see only their own |
@@ -100,6 +103,19 @@ Phones can be typed in any common format (`0300-1234567`, `+92 300 1234567`…) 
 Errors from business rules come back as **409** with a `code`, e.g. `{"detail": "...", "code": "maker_checker"}`.
 
 ---
+
+## Mobile login rules (Phase 3)
+
+| Rule | Where it lives |
+|---|---|
+| First login by SMS code, then a 4-digit PIN (easy PINs like 1234 refused); PIN stored hashed | `apps/accounts/mobile_auth.py` |
+| The server never says whether a phone number has an account | `request_code`, `pin_login` (same answer either way) |
+| Codes expire in 5 minutes, allow 5 tries, max 3 per phone per 15 minutes; only a hash is stored | `request_code`, `verify_code`, settings `OTP_*` |
+| 5 wrong PINs lock the PIN until a new SMS code is verified | `pin_login` |
+| Volunteers' and office bearers' phones need approval (**Users & roles → Devices**); families' are approved automatically | `pin_login`, `approve_device` |
+| Blocking a lost phone stops its tokens on the very next request | `apps/accounts/authentication.py` (`DeviceJWTAuthentication`) |
+
+**SMS:** no provider is chosen yet. In development the code is printed in the server log; production sends nothing until `SMS_BACKEND` points at a provider class (`apps/accounts/sms.py`).
 
 ## Finance rules (Phase 1)
 
@@ -265,6 +281,8 @@ See [ADR 0006](docs/adr/0006-need-score.md) for why.
 
 - **The same stale-copy bug, again.** `approve_application` confirmed the entitlement, but kept using its own in-memory copy, which still said "planned". Services that lock and change a row return the fresh copy; always use what they return (`entitlement = confirm_entitlement(entitlement, user)`).
 
+- **Raising an error inside a transaction undoes everything in it, including the counter of wrong tries.** The first version of `verify_code` added 1 to `attempts` and then raised "wrong code" inside `@transaction.atomic`, so the +1 was rolled back and codes could be guessed forever. The tests caught it. Now the outcome is decided inside the transaction and the error is raised after it commits.
+
 ### Why only these apps?
 
 The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 added `registry`, `assessment`, `programs`, `benefits`, `distribution` and `applications`.
@@ -274,6 +292,7 @@ The architecture has ~14 modules, but empty folders teach nothing and must be ma
 ## Next
 
 - **Website**: show the live Transparency page from `/api/v1/public/shinka/transparency/` instead of Facebook photos (in the `ShinkaWellFareSociety` repo).
-- **Phase 3**: OTP + PIN login, beneficiary endpoints (`/me/household/`, `/me/summary/`, `/me/qr/`), registered devices, then the mobile app.
+- **Phase 3 — rest**: the mobile app (`mobile/`, Expo): volunteer and beneficiary dashboards, offline registration and distribution.
+- **SMS provider** for login codes and receipts; admin 2-factor login.
 - Later in distribution: link cash payouts to finance expenses automatically; stock of packages. Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
 - Later in finance: automatic WhatsApp/SMS receipts (notifications module), PDF monthly report, file storage on Cloudflare R2.

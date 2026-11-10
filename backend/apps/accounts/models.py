@@ -5,11 +5,13 @@ switch to a custom user after the first migration.
 People log in with their phone number, not a username or email.
 """
 
+from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
 
-from apps.core.models import UUIDModel
+from apps.core.models import TimeStampedModel, UUIDModel
 
 from .phone import normalize_phone
 
@@ -63,6 +65,9 @@ class User(UUIDModel, AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False, help_text="Can log in to the admin panel.")
     date_joined = models.DateTimeField(default=timezone.now)
+    # 4-digit PIN for the mobile app (set after an SMS code). Stored hashed, like a password.
+    pin_hash = models.CharField(max_length=128, blank=True, editable=False)
+    pin_failed_attempts = models.PositiveSmallIntegerField(default=0, editable=False)
 
     objects = UserManager()
 
@@ -86,3 +91,53 @@ class User(UUIDModel, AbstractBaseUser, PermissionsMixin):
 
     def has_role(self, role: Role) -> bool:
         return self.groups.filter(name=role).exists()
+
+    def set_pin(self, pin: str) -> None:
+        self.pin_hash = make_password(pin)
+        self.pin_failed_attempts = 0
+
+    def check_pin(self, pin: str) -> bool:
+        return bool(self.pin_hash) and check_password(pin, self.pin_hash)
+
+
+class OneTimeCode(UUIDModel, TimeStampedModel):
+    """A 6-digit code sent by SMS. Only a keyed hash is stored, never the code itself."""
+
+    phone = models.CharField(max_length=16, db_index=True)
+    code_hash = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class Device(UUIDModel, TimeStampedModel):
+    """
+    A phone that logged in with a PIN. Volunteers' and office bearers' phones must be
+    approved by the office; a lost phone can be blocked, which stops its login at once.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Waiting for approval"
+        APPROVED = "approved", "Approved"
+        BLOCKED = "blocked", "Blocked"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="devices")
+    device_id = models.CharField(max_length=100, help_text="Made by the app on first start.")
+    name = models.CharField(max_length=100, blank=True, help_text="e.g. phone model")
+    platform = models.CharField(max_length=10, blank=True)
+    push_token = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.PENDING)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    last_seen = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-last_seen"]
+        constraints = [models.UniqueConstraint(fields=["user", "device_id"], name="uniq_user_device")]
+
+    def __str__(self) -> str:
+        return f"{self.user.name} · {self.name or self.device_id[:8]}"

@@ -55,6 +55,7 @@ LOCAL_APPS = [
     "apps.benefits",
     "apps.distribution",
     "apps.applications",
+    "apps.portal",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -124,6 +125,13 @@ FIELD_ENCRYPTION_KEYS = env.list(
 # Never change it once data exists: every stored hash would stop matching.
 CNIC_HASH_PEPPER = env("CNIC_HASH_PEPPER", default="dev-only-pepper")
 
+# --- Mobile login (SMS codes and PINs) ---------------------------------------
+SMS_BACKEND = env("SMS_BACKEND", default="apps.accounts.sms.ConsoleSMS")
+OTP_VALID_MINUTES = 5
+OTP_MAX_ATTEMPTS = 5  # wrong tries per code
+OTP_MAX_PER_15_MIN = 3  # codes sent to one phone
+PIN_MAX_ATTEMPTS = 5  # wrong PINs before a new SMS code is needed
+
 # --- Language & time --------------------------------------------------------
 
 LANGUAGE_CODE = "en"
@@ -144,7 +152,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.accounts.authentication.DeviceJWTAuthentication",  # JWT + "is this phone still allowed?"
         "rest_framework.authentication.SessionAuthentication",
     ],
     # Secure by default: every endpoint needs login unless it opts out.

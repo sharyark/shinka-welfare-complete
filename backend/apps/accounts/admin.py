@@ -7,7 +7,10 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm
 
-from .models import User
+from apps.core.admin_tools import run_service
+
+from . import mobile_auth
+from .models import Device, User
 from .phone import normalize_phone
 
 
@@ -64,3 +67,37 @@ admin.site.unregister(Group)
 class RoleAdmin(ModelAdmin):
     search_fields = ["name"]
     filter_horizontal = ["permissions"]
+
+
+@admin.register(Device)
+class DeviceAdmin(ModelAdmin):
+    """Phones used with the mobile app. Approve volunteers' phones; block lost ones."""
+
+    list_display = ["user", "name", "platform", "status", "last_seen"]
+    list_filter = ["status", "platform"]
+    search_fields = ["user__name", "user__phone", "name"]
+    fields = ["user", "name", "platform", "device_id", "status", "approved_by", "last_seen"]
+    readonly_fields = fields
+    actions = ["approve", "block"]
+
+    def has_add_permission(self, request):
+        return False  # devices appear when someone logs in from the app
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("user")
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(user__society=request.user.society)
+
+    @admin.action(description="Approve selected phones", permissions=["change"])
+    def approve(self, request, queryset):
+        run_service(
+            self, request, queryset, lambda d: mobile_auth.approve_device(d, request.user), "approved"
+        )
+
+    @admin.action(description="Block selected phones (lost or stolen)", permissions=["change"])
+    def block(self, request, queryset):
+        run_service(self, request, queryset, lambda d: mobile_auth.block_device(d, request.user), "blocked")

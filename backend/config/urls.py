@@ -14,21 +14,39 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
-from apps.accounts.api import LoginView, MeView
+from apps.accounts.api import (
+    LoginView,
+    MeView,
+    PinLoginView,
+    RequestCodeView,
+    SetPinView,
+    VerifyCodeView,
+)
+from apps.accounts.authentication import DeviceAwareRefreshSerializer
 from apps.applications.urls import applications_urls
 from apps.assessment.urls import assessment_urls
 from apps.benefits.urls import benefits_urls
 from apps.core.api import HealthView
 from apps.distribution.urls import distribution_urls
 from apps.finance.urls import finance_urls, public_urls
+from apps.portal.urls import portal_urls
 from apps.registry.urls import registry_urls
 
 api_v1 = [
     path("health/", HealthView.as_view(), name="health"),
     path("auth/login/", LoginView.as_view(), name="login"),
-    path("auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path(
+        "auth/token/refresh/",
+        TokenRefreshView.as_view(serializer_class=DeviceAwareRefreshSerializer),
+        name="token-refresh",
+    ),
+    path("auth/otp/request/", RequestCodeView.as_view(), name="otp-request"),
+    path("auth/otp/verify/", VerifyCodeView.as_view(), name="otp-verify"),
+    path("auth/pin/set/", SetPinView.as_view(), name="pin-set"),
+    path("auth/pin/login/", PinLoginView.as_view(), name="pin-login"),
     path("auth/logout/", TokenBlacklistView.as_view(), name="logout"),
     path("me/", MeView.as_view(), name="me"),
+    path("me/", include(portal_urls)),
     path("finance/", include(finance_urls)),
     path("registry/", include(registry_urls)),
     path("assessments/", include(assessment_urls)),
