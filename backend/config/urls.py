@@ -18,6 +18,7 @@ from apps.accounts.api import LoginView, MeView
 from apps.assessment.urls import assessment_urls
 from apps.benefits.urls import benefits_urls
 from apps.core.api import HealthView
+from apps.distribution.urls import distribution_urls
 from apps.finance.urls import finance_urls, public_urls
 from apps.registry.urls import registry_urls
 
@@ -31,6 +32,7 @@ api_v1 = [
     path("registry/", include(registry_urls)),
     path("assessments/", include(assessment_urls)),
     path("benefits/", include(benefits_urls)),
+    path("distribution/", include(distribution_urls)),
     path("public/", include(public_urls)),
 ]
 

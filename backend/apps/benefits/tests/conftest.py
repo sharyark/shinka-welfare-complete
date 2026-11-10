@@ -6,11 +6,11 @@ from django.utils import timezone
 
 from apps.assessment import services as assessment
 from apps.assessment.tests.conftest import *  # noqa: F403  (society, users, register, verified, submit…)
-from apps.assessment.tests.conftest import COMFORTABLE, POOR
+from apps.assessment.tests.conftest import COMFORTABLE, POOR  # noqa: F401  (re-exported for tests)
 from apps.programs.models import Cycle, Program
 from apps.programs.services import activate_cycle
 from apps.registry import services as registry
-from apps.registry.tests.conftest import child, head
+from apps.registry.tests.conftest import child, head  # noqa: F401  (re-exported for tests)
 
 
 @pytest.fixture
@@ -62,6 +62,3 @@ def make_cycle(society, coordinator):
 def born(years_ago: int) -> date:
     today = timezone.localdate()
     return today.replace(year=today.year - years_ago) - timedelta(days=10)
-
-
-__all__ = ["COMFORTABLE", "POOR", "born", "child", "head"]

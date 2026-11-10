@@ -6,7 +6,7 @@ Full design: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/ad
 
 | Folder | What | Status |
 |---|---|---|
-| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) done · **Phase 2: registry, need score, programs & benefits done**; applications next |
+| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) done · **Phase 2: registry, need score, programs, benefits, distribution done**; applications next |
 | `mobile/` | React Native (Expo) app | Phase 3 |
 | website | Existing public site (separate repo: `ShinkaWellFareSociety`) | Live |
 
@@ -88,6 +88,9 @@ uv run celery -A config worker -l info          # background worker (needs Redis
 | GET | `/api/v1/benefits/entitlements/` | members | Planned benefits (`?cycle=`, `?status=`). Volunteers see their households only |
 | POST | `/api/v1/benefits/entitlements/{id}/confirm/` | President | Promise a benefit (refused if over the cycle budget) |
 | POST | `/api/v1/benefits/entitlements/{id}/ready/` · `miss/` · `reschedule/` · `cancel/` | Coordinator, President | Move a benefit along its path |
+| GET | `/api/v1/distribution/lookup/?q=` | volunteers, office | Scan a QR card (or type a household code): the family and what it can collect |
+| POST | `/api/v1/distribution/deliver/` | volunteers, Coordinator, President | Record a delivery (`client_uuid` makes retries safe; optional photo) |
+| GET | `/api/v1/distribution/` · `report/?cycle=` | volunteers (own) / office | Deliveries; planned vs delivered per mohalla and volunteer |
 
 Phones can be typed in any common format (`0300-1234567`, `+92 300 1234567`…) on every login screen. They are stored as `+923001234567`.
 
@@ -153,11 +156,21 @@ See [ADR 0006](docs/adr/0006-need-score.md) for why.
 
 `seed_shinka` creates Shinka's programs (Education, College Bus, Ramadan, Eid meat, Marriage, Water Bore, Burial) with the example amounts and cutoffs from the architecture. **The committee should check them** under *Programs*.
 
+## Distribution rules (Phase 2)
+
+| Rule | Where it lives |
+|---|---|
+| Only a benefit that is *ready* can be delivered, and only once | `apps/distribution/services.py` (row lock) + one-to-one `Distribution.entitlement` |
+| A retried delivery (same `client_uuid`) returns the first record instead of failing or duplicating | `services.deliver` + unique `client_uuid` |
+| No volunteer hands out benefits to their own family | `services.deliver` (`registry.services.is_linked`) |
+| QR cards hold a signed token, so a card can't be faked by guessing a household code | `apps/registry/qr.py` |
+
 ### Running a Ramadan cycle (admin panel)
 1. **Programs → Cycles → Add**: program *Ramadan Food Package*, name "Ramadan 2027", dates, due date, budget.
 2. Tick it → *Activate*, then *Generate benefits for everyone eligible*.
 3. **Benefits → Entitlements**, filter by cycle: the President ticks and runs *Confirm*. The Coordinator runs *Mark ready to collect*.
-4. After distribution day, tick the cycle → *Close*.
+4. On distribution day volunteers scan QR cards in the app (`/distribution/lookup/` → `/distribution/deliver/`). The office can also record a delivery under **Distribution → Add**.
+5. After distribution day, tick the cycle → *Close*. `GET /api/v1/distribution/report/?cycle=…` shows planned vs delivered per mohalla and per volunteer.
 
 ### Registering a household (admin panel)
 1. **Households → Mohallas**: add the village's mohallas once.
@@ -219,6 +232,12 @@ See [ADR 0006](docs/adr/0006-need-score.md) for why.
 3. **`services.confirm_entitlement`**: locks the *cycle* row, so two confirmations at the same moment can't both squeeze under the budget.
 4. **Dependency direction**: `benefits` imports `programs`, never the reverse. That's why the Cycle admin screen lives in `apps/benefits/admin.py`.
 
+### 🎓 Tour of distribution (Phase 2)
+
+1. **`apps/distribution/services.py::deliver`**: three protections against handing out the same thing twice, in layers: a row lock (two volunteers at the same second), a status check (already delivered), and the database's one-to-one constraint (if code ever forgets the first two).
+2. **Idempotency keys**: the phone invents a `client_uuid` before sending. On a bad connection it may send twice; the server recognises the key and answers with the first result. Note the key is checked *after* taking the lock, or two identical retries could both slip through.
+3. **`apps/registry/qr.py`**: `django.core.signing` makes tamper-proof tokens with the project's secret key, with no database table needed.
+
 ### 🎓 Lessons from bugs caught while building Phase 1
 
 - **Querysets written on a class are built once, when the server starts.** `queryset=Fund.objects.filter(...)` on a serializer ran before any society was known, so the automatic society filter was skipped. The service still refused the foreign fund (defence in depth), but now `core.serializers.SocietyPKField` builds the choices per request.
@@ -232,12 +251,13 @@ See [ADR 0006](docs/adr/0006-need-score.md) for why.
 
 ### Why only these apps?
 
-The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 adds `registry`, `assessment`, `programs` and `benefits` (done), then `applications`.
+The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 adds `registry`, `assessment`, `programs`, `benefits` and `distribution` (done), then `applications`.
 
 ---
 
 ## Next
 
 - **Website**: show the live Transparency page from `/api/v1/public/shinka/transparency/` instead of Facebook photos (in the `ShinkaWellFareSociety` repo).
-- **Phase 2 — rest**: applications (marriage, water bore, burial) that create enrollments and entitlements; recording distributions (what was actually given). Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
+- **Phase 2 — rest**: applications (marriage, water bore, burial) that create enrollments and entitlements.
+- Later in distribution: link cash payouts to finance expenses automatically; stock of packages. Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
 - Later in finance: automatic WhatsApp/SMS receipts (notifications module), PDF monthly report, file storage on Cloudflare R2.

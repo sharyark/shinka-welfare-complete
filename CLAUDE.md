@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Shinka Welfare Management System: one Django 5.2 backend (REST API + Unfold admin panel) serving a welfare society's committee, a future React Native app (`mobile/`, Phase 3), and an existing public website (separate repo). Design lives in `docs/architecture.md`; decisions in `docs/adr/` (modular monolith, shared-table multi-tenancy, phone login + JWT, double-entry fund accounting, registry + CNIC protection, need score). The README rules tables (finance, registry, need score, programs & benefits) map each rule to the file that enforces it.
+Shinka Welfare Management System: one Django 5.2 backend (REST API + Unfold admin panel) serving a welfare society's committee, a future React Native app (`mobile/`, Phase 3), and an existing public website (separate repo). Design lives in `docs/architecture.md`; decisions in `docs/adr/` (modular monolith, shared-table multi-tenancy, phone login + JWT, double-entry fund accounting, registry + CNIC protection, need score). The README rules tables (finance, registry, need score, programs & benefits, distribution) map each rule to the file that enforces it.
 
 The README is also written as a teaching guide for the owner (the "🎓 Tour" and "Lessons from bugs" sections). Keep that style when updating it, and keep code comments plain and explanatory.
 
@@ -58,4 +58,6 @@ Settings: `config/settings/{base,dev,test,prod}.py`; pytest uses `config.setting
 
 **Programs & benefits.** `programs` (Program, Cycle) ← `benefits` (Enrollment, Entitlement); benefits imports programs, never the reverse, so cycle actions that touch entitlements (`generate_cycle`, `close_cycle`) and the Cycle admin live in `apps/benefits`. Entitlement status changes only via `benefits.services.move` and the `ALLOWED` map; `generate_cycle` must stay idempotent. Lock with `select_for_update(of=("self",))` when also using `select_related` on nullable FKs (PostgreSQL rejects locking outer joins). New role-permission migrations use `apps.core.role_permissions.grant`.
 
-**Phasing (YAGNI).** Apps are added only when their phase starts. Phase 2 has added `registry`, `assessment`, `programs`, `benefits`; `applications` and distribution come next (see architecture.md §7–9, §21). Don't scaffold empty apps ahead of time.
+**Distribution.** `distribution.services.deliver` is the only way an entitlement becomes `delivered` (row lock → `client_uuid` idempotency check → status/conflict checks → create → `benefits.services.move`). Household QR cards are signed tokens (`registry/qr.py`). Services that the admin uses for creation accept `into=<unsaved instance>` so the admin's object gets saved in place.
+
+**Phasing (YAGNI).** Apps are added only when their phase starts. Phase 2 has added `registry`, `assessment`, `programs`, `benefits`, `distribution`; `applications` comes next (see architecture.md §7–9, §21). Don't scaffold empty apps ahead of time.
