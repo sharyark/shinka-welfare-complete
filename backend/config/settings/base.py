@@ -56,6 +56,7 @@ LOCAL_APPS = [
     "apps.distribution",
     "apps.applications",
     "apps.portal",
+    "apps.fleet",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -191,6 +192,9 @@ SPECTACULAR_SETTINGS = {
         "PaymentMethodEnum": "apps.finance.models.PaymentMethod",
         "DistributionMethodEnum": "apps.distribution.models.Distribution.Method",
         "ApplicationStatusEnum": "apps.applications.models.Application.Status",
+        "VehicleStatusEnum": "apps.fleet.models.Vehicle.Status",
+        "TripStatusEnum": "apps.fleet.models.Trip.Status",
+        "VehicleKindEnum": "apps.fleet.models.Vehicle.Kind",
     },
 }
 

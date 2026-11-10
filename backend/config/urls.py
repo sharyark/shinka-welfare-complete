@@ -29,6 +29,7 @@ from apps.benefits.urls import benefits_urls
 from apps.core.api import HealthView
 from apps.distribution.urls import distribution_urls
 from apps.finance.urls import finance_urls, public_urls
+from apps.fleet.urls import fleet_urls
 from apps.portal.urls import portal_urls
 from apps.registry.urls import registry_urls
 
@@ -53,6 +54,7 @@ api_v1 = [
     path("benefits/", include(benefits_urls)),
     path("distribution/", include(distribution_urls)),
     path("applications/", include(applications_urls)),
+    path("fleet/", include(fleet_urls)),
     path("public/", include(public_urls)),
 ]
 
