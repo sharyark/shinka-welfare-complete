@@ -6,7 +6,7 @@ Full design: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/ad
 
 | Folder | What | Status |
 |---|---|---|
-| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) done · **Phase 2: registry, need score, programs, benefits, distribution done**; applications next |
+| `backend/` | Django 5.2 LTS: REST API + admin panel | Phase 1 (finance) and **Phase 2 (registry, need score, programs, benefits, distribution, applications) done**; Phase 3 next |
 | `mobile/` | React Native (Expo) app | Phase 3 |
 | website | Existing public site (separate repo: `ShinkaWellFareSociety`) | Live |
 
@@ -91,6 +91,9 @@ uv run celery -A config worker -l info          # background worker (needs Redis
 | GET | `/api/v1/distribution/lookup/?q=` | volunteers, office | Scan a QR card (or type a household code): the family and what it can collect |
 | POST | `/api/v1/distribution/deliver/` | volunteers, Coordinator, President | Record a delivery (`client_uuid` makes retries safe; optional photo) |
 | GET | `/api/v1/distribution/` · `report/?cycle=` | volunteers (own) / office | Deliveries; planned vs delivered per mohalla and volunteer |
+| GET / POST | `/api/v1/applications/` | families (own), volunteers, office | Apply for marriage / water bore / burial help (optional document) |
+| POST | `/api/v1/applications/{id}/visit/` | volunteers, Coordinator | Home-visit report (`{report}`) |
+| POST | `/api/v1/applications/{id}/approve/` · `reject/` · `withdraw/` | President (withdraw: the family or submitter) | Decide. Approving enrolls the family and creates a confirmed benefit |
 
 Phones can be typed in any common format (`0300-1234567`, `+92 300 1234567`…) on every login screen. They are stored as `+923001234567`.
 
@@ -164,6 +167,17 @@ See [ADR 0006](docs/adr/0006-need-score.md) for why.
 | A retried delivery (same `client_uuid`) returns the first record instead of failing or duplicating | `services.deliver` + unique `client_uuid` |
 | No volunteer hands out benefits to their own family | `services.deliver` (`registry.services.is_linked`) |
 | QR cards hold a signed token, so a card can't be faked by guessing a household code | `apps/registry/qr.py` |
+
+## Application rules (Phase 2)
+
+| Rule | Where it lives |
+|---|---|
+| Families apply for themselves; volunteers for their households; the office for anyone. Verified households only | `apps/applications/services.py` (`check_can_submit`) |
+| One open application per family (or person) per program | `services.check_can_submit` + DB constraints |
+| A different volunteer visits the home first (urgent cases like burial may skip it) | `services.record_visit`, `_check_decider` |
+| Only the President decides; not their own submission, not their own family; need-score cutoff applies | `services.approve_application` |
+| Approval creates the enrollment and a **confirmed** benefit for the approved amount and date | `services.approve_application` → `benefits.services` |
+| Every change is kept (*History* button) and only the committee, the household's volunteers and the family see it | django-simple-history, `selectors.applications_for` |
 
 ### Running a Ramadan cycle (admin panel)
 1. **Programs → Cycles → Add**: program *Ramadan Food Package*, name "Ramadan 2027", dates, due date, budget.
@@ -249,15 +263,17 @@ See [ADR 0006](docs/adr/0006-need-score.md) for why.
 
 - **SQLite doesn't check everything PostgreSQL does.** Locking an entitlement while also loading its *optional* cycle works on SQLite, but PostgreSQL refuses it ("FOR UPDATE cannot be applied to the nullable side of an outer join"). Running the tests on PostgreSQL caught it; `select_for_update(of=("self",))` locks only the row we mean.
 
+- **The same stale-copy bug, again.** `approve_application` confirmed the entitlement, but kept using its own in-memory copy, which still said "planned". Services that lock and change a row return the fresh copy; always use what they return (`entitlement = confirm_entitlement(entitlement, user)`).
+
 ### Why only these apps?
 
-The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 adds `registry`, `assessment`, `programs`, `benefits` and `distribution` (done), then `applications`.
+The architecture has ~14 modules, but empty folders teach nothing and must be maintained. Each phase adds the apps it needs (**YAGNI**: "You Aren't Gonna Need It"). Phase 1 added `finance`; Phase 2 added `registry`, `assessment`, `programs`, `benefits`, `distribution` and `applications`.
 
 ---
 
 ## Next
 
 - **Website**: show the live Transparency page from `/api/v1/public/shinka/transparency/` instead of Facebook photos (in the `ShinkaWellFareSociety` repo).
-- **Phase 2 — rest**: applications (marriage, water bore, burial) that create enrollments and entitlements.
+- **Phase 3**: OTP + PIN login, beneficiary endpoints (`/me/household/`, `/me/summary/`, `/me/qr/`), registered devices, then the mobile app.
 - Later in distribution: link cash payouts to finance expenses automatically; stock of packages. Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
 - Later in finance: automatic WhatsApp/SMS receipts (notifications module), PDF monthly report, file storage on Cloudflare R2.

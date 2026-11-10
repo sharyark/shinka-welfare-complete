@@ -35,8 +35,8 @@ def run_service(modeladmin, request, queryset, fn, done: str):
         modeladmin.message_user(request, f"{ok} {done}.", messages.SUCCESS)
 
 
-def ask_reason(modeladmin, request, queryset, action: str, title: str, fn, done: str):
-    """Show a 'reason' page first; run the service when it's submitted."""
+def ask_reason(modeladmin, request, queryset, action: str, title: str, fn, done: str, label: str = "Reason"):
+    """Show a page asking for a reason (or other short text) first; run the service when it's submitted."""
     if request.POST.get("apply"):
         reason = request.POST.get("reason", "")
         run_service(modeladmin, request, queryset, lambda obj: fn(obj, request.user, reason), done)
@@ -49,6 +49,7 @@ def ask_reason(modeladmin, request, queryset, action: str, title: str, fn, done:
             "title": title,
             "queryset": queryset,
             "action": action,
+            "label": label,
         },
     )
 

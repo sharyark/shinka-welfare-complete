@@ -15,6 +15,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
 from apps.accounts.api import LoginView, MeView
+from apps.applications.urls import applications_urls
 from apps.assessment.urls import assessment_urls
 from apps.benefits.urls import benefits_urls
 from apps.core.api import HealthView
@@ -33,6 +34,7 @@ api_v1 = [
     path("assessments/", include(assessment_urls)),
     path("benefits/", include(benefits_urls)),
     path("distribution/", include(distribution_urls)),
+    path("applications/", include(applications_urls)),
     path("public/", include(public_urls)),
 ]
 

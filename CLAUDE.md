@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Shinka Welfare Management System: one Django 5.2 backend (REST API + Unfold admin panel) serving a welfare society's committee, a future React Native app (`mobile/`, Phase 3), and an existing public website (separate repo). Design lives in `docs/architecture.md`; decisions in `docs/adr/` (modular monolith, shared-table multi-tenancy, phone login + JWT, double-entry fund accounting, registry + CNIC protection, need score). The README rules tables (finance, registry, need score, programs & benefits, distribution) map each rule to the file that enforces it.
+Shinka Welfare Management System: one Django 5.2 backend (REST API + Unfold admin panel) serving a welfare society's committee, a future React Native app (`mobile/`, Phase 3), and an existing public website (separate repo). Design lives in `docs/architecture.md`; decisions in `docs/adr/` (modular monolith, shared-table multi-tenancy, phone login + JWT, double-entry fund accounting, registry + CNIC protection, need score). The README rules tables (finance, registry, need score, programs & benefits, distribution, applications) map each rule to the file that enforces it.
 
 The README is also written as a teaching guide for the owner (the "🎓 Tour" and "Lessons from bugs" sections). Keep that style when updating it, and keep code comments plain and explanatory.
 
@@ -60,4 +60,6 @@ Settings: `config/settings/{base,dev,test,prod}.py`; pytest uses `config.setting
 
 **Distribution.** `distribution.services.deliver` is the only way an entitlement becomes `delivered` (row lock → `client_uuid` idempotency check → status/conflict checks → create → `benefits.services.move`). Household QR cards are signed tokens (`registry/qr.py`). Services that the admin uses for creation accept `into=<unsaved instance>` so the admin's object gets saved in place.
 
-**Phasing (YAGNI).** Apps are added only when their phase starts. Phase 2 has added `registry`, `assessment`, `programs`, `benefits`, `distribution`; `applications` comes next (see architecture.md §7–9, §21). Don't scaffold empty apps ahead of time.
+**Applications.** submitted → (visit) under_review → approved/rejected, or withdrawn; urgent ones may skip the visit. `approve_application` enrolls via `benefits.services.enroll` and creates a confirmed entitlement. When a service returns a locked/updated object, use the returned object, never the one you passed in.
+
+**Phasing (YAGNI).** Apps are added only when their phase starts. Phase 2 is complete (`registry`, `assessment`, `programs`, `benefits`, `distribution`, `applications`). Phase 3 (OTP/PIN auth, beneficiary `/me/` API, mobile app) is next (see architecture.md §12–13, §15, §21). Don't scaffold empty apps ahead of time.
