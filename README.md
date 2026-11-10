@@ -6,7 +6,7 @@ Full design: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/ad
 
 | Folder | What | Status |
 |---|---|---|
-| `backend/` | Django 5.2 LTS: REST API + admin panel | Phases 1–2 done · **Phase 3: mobile login, family API, app done** |
+| `backend/` | Django 5.2 LTS: REST API + admin panel | Phases 1–3 done · **Phase 4: fleet, assets, reports done** |
 | `mobile/` | React Native (Expo) app for families and volunteers: see [mobile/README.md](mobile/README.md) | **Phase 3: first version done** |
 | website | Existing public site (separate repo: `ShinkaWellFareSociety`) | Live |
 
@@ -68,6 +68,10 @@ uv run celery -A config worker -l info          # background worker (needs Redis
 | POST | `/api/v1/auth/otp/request/` → `otp/verify/` → `pin/set/` | anyone | Mobile app first login: SMS code, then choose a 4-digit PIN |
 | POST | `/api/v1/auth/pin/login/` | anyone | `{phone, pin, device_id}` → tokens. Volunteers' phones need office approval first |
 | GET | `/api/v1/me/household/` · `me/summary/?year=` · `me/qr/` | the family | Own household; help received and upcoming; QR card token. Never the need score |
+| GET / POST | `/api/v1/fleet/trips/` (+ `{id}/start/` · `complete/` · `cancel/`) | families (own), volunteers, office | Ambulance / bus trips with km and fuel |
+| GET | `/api/v1/fleet/trips/costs/?month=YYYY-MM` · `fleet/vehicles/` | office | Cost per vehicle per month; vehicles |
+| GET | `/api/v1/reports/overview/?year=` | office bearers, auditors | The committee dashboard (also on the admin home page) |
+| GET | `/api/v1/public/{society}/impact/?year=` | anyone | Impact totals for the website: households helped, benefits by program, trips, assets. No names |
 | GET | `/api/v1/finance/funds/` | members | Active funds (balances for office bearers only) |
 | GET / POST | `/api/v1/finance/donors/` | members | Find or add donors (`?q=name`) |
 | GET / POST | `/api/v1/finance/donations/` | members | Record a donation (pending). Volunteers see only their own |
@@ -103,6 +107,16 @@ Phones can be typed in any common format (`0300-1234567`, `+92 300 1234567`…) 
 Errors from business rules come back as **409** with a `code`, e.g. `{"detail": "...", "code": "maker_checker"}`.
 
 ---
+
+## Operations (Phase 4)
+
+| What | Where it lives |
+|---|---|
+| Trips: requested → on trip → completed / cancelled; one trip at a time per vehicle; vehicle must be in service | `apps/fleet/services.py` |
+| Families request the ambulance for themselves only; volunteers and the office run trips | `fleet.services.request_trip` |
+| Community assets (bores, filter plants, cameras, lights) with every status change kept | `apps/assets/models.py` (django-simple-history) |
+| Admin home page shows this year's numbers and the work waiting for someone | `apps/reports/dashboard.py`, `templates/admin/index.html` |
+| Public impact numbers are totals only; money stays on the transparency page (published months only) | `apps/reports/selectors.py::public_impact` |
 
 ## Mobile login rules (Phase 3)
 
@@ -293,6 +307,8 @@ The architecture has ~14 modules, but empty folders teach nothing and must be ma
 
 - **Website**: show the live Transparency page from `/api/v1/public/shinka/transparency/` instead of Facebook photos (in the `ShinkaWellFareSociety` repo).
 - **Phase 3 — rest**: offline household registration in the app (sync push/pull), push notifications, building the app for Play Store (EAS).
+- **Phase 4 — rest**: payroll for staff (sanitation workers, guard, drivers); monthly PDF report.
+- **Going live**: server, HTTPS, backups with monthly restore test (architecture §19).
 - **SMS provider** for login codes and receipts; admin 2-factor login.
 - Later in distribution: link cash payouts to finance expenses automatically; stock of packages. Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
 - Later in finance: automatic WhatsApp/SMS receipts (notifications module), PDF monthly report, file storage on Cloudflare R2.

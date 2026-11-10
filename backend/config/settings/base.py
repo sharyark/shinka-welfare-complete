@@ -57,6 +57,8 @@ LOCAL_APPS = [
     "apps.applications",
     "apps.portal",
     "apps.fleet",
+    "apps.assets",
+    "apps.reports",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -195,6 +197,7 @@ SPECTACULAR_SETTINGS = {
         "VehicleStatusEnum": "apps.fleet.models.Vehicle.Status",
         "TripStatusEnum": "apps.fleet.models.Trip.Status",
         "VehicleKindEnum": "apps.fleet.models.Vehicle.Kind",
+        "AssetStatusEnum": "apps.assets.models.Asset.Status",
     },
 }
 
@@ -216,6 +219,7 @@ UNFOLD = {
     "SITE_HEADER": "Shinka Welfare Society",
     "SITE_SYMBOL": "volunteer_activism",
     "SHOW_HISTORY": True,
+    "DASHBOARD_CALLBACK": "apps.reports.dashboard.dashboard_callback",  # numbers on the admin home page
     "COLORS": {
         "primary": {
             "50": "236 253 245",

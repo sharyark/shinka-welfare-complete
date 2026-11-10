@@ -32,6 +32,7 @@ from apps.finance.urls import finance_urls, public_urls
 from apps.fleet.urls import fleet_urls
 from apps.portal.urls import portal_urls
 from apps.registry.urls import registry_urls
+from apps.reports.api import OverviewView, PublicImpactView
 
 api_v1 = [
     path("health/", HealthView.as_view(), name="health"),
@@ -56,6 +57,8 @@ api_v1 = [
     path("applications/", include(applications_urls)),
     path("fleet/", include(fleet_urls)),
     path("public/", include(public_urls)),
+    path("public/<slug:slug>/impact/", PublicImpactView.as_view(), name="public-impact"),
+    path("reports/overview/", OverviewView.as_view(), name="reports-overview"),
 ]
 
 urlpatterns = [

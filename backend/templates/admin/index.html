@@ -1,0 +1,39 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+{% if dashboard %}
+<div class="mb-8">
+  <h2 class="font-semibold text-lg mb-3">{{ dashboard.year }} at a glance</h2>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+    {% for label, value in dashboard_cards %}
+    <div class="border rounded-md p-4 bg-white dark:bg-base-900 dark:border-base-800">
+      <div class="text-sm text-base-500">{{ label }}</div>
+      <div class="text-2xl font-semibold">{{ value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% if dashboard_waiting %}
+  <h3 class="font-semibold mb-2">Waiting for someone</h3>
+  <ul class="list-disc ml-6 mb-4">
+    {% for label, value, url in dashboard_waiting %}<li><a class="text-primary-600" href="{{ url }}">{{ value }} {{ label }}</a></li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% if dashboard.benefits_by_program %}
+  <h3 class="font-semibold mb-2">Help given this year</h3>
+  <table class="mb-4">
+    {% for row in dashboard.benefits_by_program %}
+    <tr><td class="pr-6">{{ row.program }}</td><td class="pr-6">{{ row.count }} × {{ row.quantity|floatformat:0 }} {{ row.unit }}</td><td>{{ row.households }} households</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+{% include "unfold/helpers/dashboard_default.html" %}
+{% endblock %}
