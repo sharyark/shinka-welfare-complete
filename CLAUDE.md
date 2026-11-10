@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Shinka Welfare Management System: one Django 5.2 backend (REST API + Unfold admin panel) serving a welfare society's committee, a future React Native app (`mobile/`, Phase 3), and an existing public website (separate repo). Design lives in `docs/architecture.md`; decisions in `docs/adr/` (modular monolith, shared-table multi-tenancy, phone login + JWT, double-entry fund accounting, registry + CNIC protection, need score). The README rules tables (finance, registry, need score, programs & benefits, distribution, applications) map each rule to the file that enforces it.
+Shinka Welfare Management System: one Django 5.2 backend (REST API + Unfold admin panel) serving a welfare society's committee, a React Native app (`mobile/`, Expo SDK 58), and an existing public website (separate repo). Design lives in `docs/architecture.md`; decisions in `docs/adr/` (modular monolith, shared-table multi-tenancy, phone login + JWT, double-entry fund accounting, registry + CNIC protection, need score). The README rules tables (finance, registry, need score, programs & benefits, distribution, applications) map each rule to the file that enforces it.
 
 The README is also written as a teaching guide for the owner (the "🎓 Tour" and "Lessons from bugs" sections). Keep that style when updating it, and keep code comments plain and explanatory.
 
@@ -29,6 +29,13 @@ uv run python manage.py makemigrations --check --dry-run
 SQLite is used when `DATABASE_URL` is empty (`.env.example`). `docker compose up --build` runs PostgreSQL + Redis. CI (`.github/workflows/backend.yml`) runs ruff check + `ruff format --check`, the migrations check, tests **on PostgreSQL**, and `manage.py check --deploy` with prod settings. All of these must pass.
 
 Settings: `config/settings/{base,dev,test,prod}.py`; pytest uses `config.settings.test` (MD5 hasher, eager Celery, no throttling, plus the test-only `apps.core.tests.testapp`).
+
+Mobile (`mobile/`, Node 22 via `.nvmrc`; read `mobile/AGENTS.md` — check versioned Expo docs, install with `npx expo install`):
+
+```bash
+npm run typecheck && npm test               # tsc + jest (tests in __tests__/*-test.ts)
+npx expo export --platform web --output-dir /tmp/web-build   # bundle check, also run in CI
+```
 
 ## Architecture
 
@@ -64,4 +71,6 @@ Settings: `config/settings/{base,dev,test,prod}.py`; pytest uses `config.setting
 
 **Mobile auth & portal (Phase 3).** `accounts/mobile_auth.py`: SMS code (`OneTimeCode`, keyed hash) → signed set-PIN token → PIN (`User.pin_hash`) → `pin_login` returns JWTs with a `device` claim; `DeviceJWTAuthentication` and `DeviceAwareRefreshSerializer` reject blocked/unapproved devices. Never raise inside `transaction.atomic` after saving a counter you need to keep; decide inside, raise after. SMS goes through `accounts/sms.py::send_sms` (`SMS_BACKEND`; tests use `MemorySMS`). `apps/portal` has no models: read-only `/api/v1/me/...` endpoints for families, finding the household via `Household.users` (no ids in URLs).
 
-**Phasing (YAGNI).** Apps are added only when their phase starts. Phase 2 is complete; Phase 3 backend (mobile auth, `portal`) is done. The mobile app (`mobile/`) is next (see architecture.md §12–13, §15, §21). Don't scaffold empty apps ahead of time.
+**Mobile app.** All HTTP goes through `src/api/client.ts` (`createClient`, dependency-injected `fetch`; `ApiError.code` mirrors backend codes, `network` when offline) and `src/api/index.ts` (one function per endpoint; types hand-written in `src/api/types.ts`, keep them in sync with serializers). Tokens via `src/auth/storage.ts` (SecureStore on phones, AsyncStorage on web). Deliveries without signal go to `src/offline/queue.ts`, keeping the same `client_uuid`. All UI text goes through `src/i18n/strings.ts` (ur + en) and the `Text`/`Input` wrappers in `src/ui` (RTL for Urdu).
+
+**Phasing (YAGNI).** Apps are added only when their phase starts. Phase 2 is complete; Phase 3 (mobile auth, `portal`, first app version) is done. Next: offline registration sync, then Phase 4 (fleet, assets, reports) (see architecture.md §12–13, §15, §21). Don't scaffold empty apps ahead of time.

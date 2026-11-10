@@ -6,8 +6,8 @@ Full design: [docs/architecture.md](docs/architecture.md) · Decisions: [docs/ad
 
 | Folder | What | Status |
 |---|---|---|
-| `backend/` | Django 5.2 LTS: REST API + admin panel | Phases 1–2 done · **Phase 3: mobile login + family API done**; mobile app next |
-| `mobile/` | React Native (Expo) app | Phase 3 |
+| `backend/` | Django 5.2 LTS: REST API + admin panel | Phases 1–2 done · **Phase 3: mobile login, family API, app done** |
+| `mobile/` | React Native (Expo) app for families and volunteers: see [mobile/README.md](mobile/README.md) | **Phase 3: first version done** |
 | website | Existing public site (separate repo: `ShinkaWellFareSociety`) | Live |
 
 ---
@@ -292,7 +292,7 @@ The architecture has ~14 modules, but empty folders teach nothing and must be ma
 ## Next
 
 - **Website**: show the live Transparency page from `/api/v1/public/shinka/transparency/` instead of Facebook photos (in the `ShinkaWellFareSociety` repo).
-- **Phase 3 — rest**: the mobile app (`mobile/`, Expo): volunteer and beneficiary dashboards, offline registration and distribution.
+- **Phase 3 — rest**: offline household registration in the app (sync push/pull), push notifications, building the app for Play Store (EAS).
 - **SMS provider** for login codes and receipts; admin 2-factor login.
 - Later in distribution: link cash payouts to finance expenses automatically; stock of packages. Also documents/photos for households (needs private file storage). See `docs/architecture.md`, sections 8–9 and 21.
 - Later in finance: automatic WhatsApp/SMS receipts (notifications module), PDF monthly report, file storage on Cloudflare R2.

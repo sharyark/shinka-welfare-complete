@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Shinka Welfare",
+    "slug": "shinka-welfare",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.shinkawelfare.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "org.shinkawelfare.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Shinka Welfare uses the camera to scan family QR cards on distribution day.",
+          "barcodeScannerEnabled": true
+        }
+      ]
+    ],
+    "scheme": "shinkawelfare",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
